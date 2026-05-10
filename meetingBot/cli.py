@@ -41,10 +41,16 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Start headed Chromium minimized. This keeps audio playback more reliable than headless mode.",
     )
+    parser.add_argument(
+        "--show-browser",
+        action="store_true",
+        help="Keep Chromium visible for platforms that are minimized by default.",
+    )
     parser.set_defaults(
         grant_media_permissions=False,
         deny_media_permission_prompts=True,
         block_native_app_prompts=True,
+        prefer_zoom_web_client_url=True,
     )
     parser.add_argument(
         "--grant-media-permissions",
@@ -81,6 +87,18 @@ def build_parser() -> argparse.ArgumentParser:
         dest="block_native_app_prompts",
         action="store_false",
         help="Allow Zoom/Teams native-app launch prompts.",
+    )
+    parser.add_argument(
+        "--prefer-zoom-web-client-url",
+        dest="prefer_zoom_web_client_url",
+        action="store_true",
+        help="Rewrite Zoom /j/ links to the web client and prefill the bot name. Enabled by default.",
+    )
+    parser.add_argument(
+        "--no-prefer-zoom-web-client-url",
+        dest="prefer_zoom_web_client_url",
+        action="store_false",
+        help="Open the original Zoom link instead of rewriting to the web client.",
     )
     parser.add_argument(
         "--browser-profile",
@@ -164,16 +182,21 @@ def create_browser_context(args: argparse.Namespace) -> Any:
     if args.no_browser:
         return contextlib.nullcontext()
 
+    start_minimized = args.start_minimized
+    if args.platform in {"google-meet", "teams"} and not args.headless and not args.show_browser:
+        start_minimized = True
+
     return MeetingBrowser(
         meeting_url=args.meeting_url,
         platform=args.platform,
         display_name=args.display_name,
         headless=args.headless,
         browser_profile=args.browser_profile,
-        start_minimized=args.start_minimized,
+        start_minimized=start_minimized,
         grant_media_permissions=args.grant_media_permissions,
         deny_media_permission_prompts=args.deny_media_permission_prompts,
         block_native_app_prompts=args.block_native_app_prompts,
+        prefer_zoom_web_client_url=args.prefer_zoom_web_client_url,
     )
 
 

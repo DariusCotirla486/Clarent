@@ -3,3 +3,4 @@ __pycache__/
 venv/
 .env
 transcripts/
+.meeting_bot_browser_profile/
