@@ -9,6 +9,16 @@ import urllib.parse
 from pathlib import Path
 from typing import Any
 
+from meetingBot.utils import (
+    TEAMS_BROWSER_JOIN_BUTTONS,
+    TEAMS_CAMERA_LABELS,
+    TEAMS_JOIN_BUTTONS,
+    TEAMS_MICROPHONE_LABELS,
+    TEAMS_NAME_INPUT_SELECTORS,
+    TEAMS_NO_AUDIO_VIDEO_BUTTONS,
+    TEAMS_WAITING_ROOM_PHRASES,
+)
+
 
 class MeetingBrowser:
     def __init__(
@@ -24,6 +34,7 @@ class MeetingBrowser:
         block_native_app_prompts: bool,
         prefer_zoom_web_client_url: bool,
     ) -> None:
+        self.original_meeting_url = meeting_url
         self.meeting_url = self._normalize_meeting_url(
             meeting_url,
             platform,
@@ -198,60 +209,90 @@ class MeetingBrowser:
         self._click_any_text(["Ask to join", "Join now", "Join"], timeout_ms=1_500)
 
     def _try_join_teams(self) -> None:
-        deadline = time.monotonic() + 45
-        requested_admission = False
-        while (
-            time.monotonic() < deadline
-            and not self._looks_joined()
-            and not self._looks_waiting_for_admission()
-            and not requested_admission
-        ):
+        deadline = time.monotonic() + 60
+        continued_in_browser = False
+        continued_without_media = False
+
+        while time.monotonic() < deadline:
+            if self._looks_joined() or self._looks_waiting_for_admission():
+                return
+
             self._dismiss_browser_prompt()
-            self._click_any_text(
-                [
-                    "Continue on this browser",
-                    "Join on the web instead",
-                    "Join on the web",
-                    "Use the web app instead",
-                ],
-                timeout_ms=500,
+            if not continued_in_browser:
+                continued_in_browser = self._click_any_button_text(
+                    TEAMS_BROWSER_JOIN_BUTTONS,
+                    timeout_ms=500,
+                )
+                time.sleep(0.3)
+                continue
+
+            if not continued_without_media:
+                continued_without_media = self._click_any_button_text(
+                    TEAMS_NO_AUDIO_VIDEO_BUTTONS,
+                    timeout_ms=700,
+                )
+                if continued_without_media:
+                    time.sleep(0.3)
+                    continue
+
+            name_filled = self._fill_display_name(
+                TEAMS_NAME_INPUT_SELECTORS,
+                timeout_ms=700,
             )
-            self._fill_display_name(
-                [
-                    "input[placeholder*='name']",
-                    "input[data-tid='prejoin-display-name-input']",
-                    "input[id*='username']",
-                ],
-                timeout_ms=250,
-            )
-            self._click_any_text(
-                [
-                    "Continue without audio or video",
-                    "Continue without audio",
-                    "Continue without microphone and camera",
-                    "Continue without mic and camera",
-                    "Join without audio or video",
-                    "Join without audio",
-                ],
-                timeout_ms=500,
-            )
-            self._click_any_label(["Turn off microphone", "Microphone"])
-            self._click_any_label(["Turn off camera", "Camera"])
-            requested_admission = self._click_any_text(["Join now", "Join"], timeout_ms=700)
-            if requested_admission:
-                time.sleep(2)
-                break
+            if name_filled and self._click_any_button_text(TEAMS_JOIN_BUTTONS, timeout_ms=700):
+                self._finish_teams_join_after_click()
+                return
+
+            time.sleep(0.25)
+
+    def _finish_teams_join_after_click(self) -> None:
+        deadline = time.monotonic() + 12
+        while time.monotonic() < deadline:
+            if self._looks_joined() or self._looks_waiting_for_admission():
+                return
+
+            self._dismiss_browser_prompt()
+            self._click_any_button_text(TEAMS_NO_AUDIO_VIDEO_BUTTONS, timeout_ms=250)
+            self._click_any_button_text(TEAMS_JOIN_BUTTONS, timeout_ms=300)
             time.sleep(0.25)
 
     def _try_join_zoom(self) -> None:
         deadline = time.monotonic() + 60
         requested_admission = False
+        joining_seen_at: float | None = None
+        retried_original_link = False
+        reloaded_join_screen = False
         while (
             time.monotonic() < deadline
             and not self._looks_joined()
             and not self._looks_waiting_for_admission()
             and not requested_admission
         ):
+            if self._looks_zoom_joining_screen():
+                if joining_seen_at is None:
+                    joining_seen_at = time.monotonic()
+                elif time.monotonic() - joining_seen_at > 8:
+                    if self.page.url != self.original_meeting_url and not retried_original_link:
+                        print("[browser] Zoom join screen looks stuck. Retrying original Zoom link.")
+                        self.page.goto(
+                            self.original_meeting_url,
+                            wait_until="domcontentloaded",
+                            timeout=60_000,
+                        )
+                        self._dismiss_browser_prompt()
+                        retried_original_link = True
+                        joining_seen_at = None
+                        continue
+                    if not reloaded_join_screen:
+                        print("[browser] Zoom join screen still stuck. Reloading once.")
+                        self.page.reload(wait_until="domcontentloaded", timeout=60_000)
+                        self._dismiss_browser_prompt()
+                        reloaded_join_screen = True
+                        joining_seen_at = None
+                        continue
+            else:
+                joining_seen_at = None
+
             self._dismiss_browser_prompt()
             self._accept_cookies()
             self._click_any_text(
@@ -349,12 +390,12 @@ class MeetingBrowser:
                 continue
         return False
 
-    def _click_any_label(self, labels: list[str]) -> bool:
+    def _click_any_label(self, labels: list[str], timeout_ms: int = 1_500) -> bool:
         for label in labels:
             try:
                 button = self.page.get_by_label(label, exact=False).first
-                button.click(timeout=1_500)
-                time.sleep(0.5)
+                button.click(timeout=timeout_ms)
+                time.sleep(0.2)
                 return True
             except Exception:
                 continue
@@ -384,6 +425,32 @@ class MeetingBrowser:
                     return True
                 except Exception:
                     continue
+        return False
+
+    def _click_any_button_text(self, labels: list[str], timeout_ms: int = 1_000) -> bool:
+        for label in labels:
+            try:
+                button = self.page.get_by_role("button", name=label, exact=False).first
+                button.click(timeout=timeout_ms)
+                time.sleep(0.1)
+                return True
+            except Exception:
+                try:
+                    link = self.page.get_by_role("link", name=label, exact=False).first
+                    link.click(timeout=timeout_ms)
+                    time.sleep(0.1)
+                    return True
+                except Exception:
+                    continue
+        return False
+
+    def _has_visible_selector(self, selectors: list[str], timeout_ms: int = 150) -> bool:
+        for selector in selectors:
+            try:
+                if self.page.locator(selector).first.is_visible(timeout=timeout_ms):
+                    return True
+            except Exception:
+                continue
         return False
 
     def _looks_joined(self) -> bool:
@@ -423,11 +490,8 @@ class MeetingBrowser:
             "host will let you in",
             "waiting for the host",
             "waiting for host",
-            "asked to join",
-            "let people in the meeting know you're waiting",
-            "let someone in the meeting know you're waiting",
-            "someone in the meeting should let you in",
             "when the meeting starts",
+            *TEAMS_WAITING_ROOM_PHRASES,
         ]
         try:
             body_text = self.page.locator("body").inner_text(timeout=300).lower()
@@ -435,6 +499,16 @@ class MeetingBrowser:
             return False
 
         return any(phrase in body_text for phrase in waiting_phrases)
+
+    def _looks_zoom_joining_screen(self) -> bool:
+        if self.platform != "zoom":
+            return False
+        try:
+            body_text = self.page.locator("body").inner_text(timeout=300).lower()
+        except Exception:
+            return False
+
+        return "joining meeting" in body_text or "joining..." in body_text
 
     def _dismiss_browser_prompt(self) -> None:
         try:
