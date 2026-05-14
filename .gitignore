@@ -4,3 +4,6 @@ venv/
 .env
 transcripts/
 .meeting_bot_browser_profile/
+backend/target/
+frontend/node_modules/
+frontend/dist/
