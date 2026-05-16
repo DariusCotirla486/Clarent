@@ -29,6 +29,9 @@ public class TranscriptSegment {
     @Column(length = 40)
     private String language;
 
+    @Column(length = 80)
+    private String speaker;
+
     private Instant startedAt;
 
     private Instant endedAt;
@@ -39,10 +42,18 @@ public class TranscriptSegment {
     protected TranscriptSegment() {
     }
 
-    public TranscriptSegment(MeetingSession meeting, String text, String language, Instant startedAt, Instant endedAt) {
+    public TranscriptSegment(
+            MeetingSession meeting,
+            String text,
+            String language,
+            String speaker,
+            Instant startedAt,
+            Instant endedAt
+    ) {
         this.meeting = meeting;
         this.text = text;
         this.language = language;
+        this.speaker = speaker;
         this.startedAt = startedAt;
         this.endedAt = endedAt;
     }
@@ -61,6 +72,10 @@ public class TranscriptSegment {
 
     public String getLanguage() {
         return language;
+    }
+
+    public String getSpeaker() {
+        return speaker;
     }
 
     public Instant getStartedAt() {

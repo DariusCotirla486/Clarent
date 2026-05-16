@@ -92,6 +92,7 @@ public class MeetingAssistantService {
                 session,
                 request.text().trim(),
                 request.language(),
+                request.speaker(),
                 request.startedAt(),
                 request.endedAt()
         ));

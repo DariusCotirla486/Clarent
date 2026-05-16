@@ -501,7 +501,7 @@ function MeetingAssistantPage() {
             {segments.map((segment) => (
               <article className="transcript-line" key={segment.id}>
                 <time>{new Date(segment.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time>
-                <p>{segment.text}</p>
+                <p>{segment.speaker && <strong>{segment.speaker}: </strong>}{segment.text}</p>
                 {segment.language && <span>{segment.language}</span>}
               </article>
             ))}

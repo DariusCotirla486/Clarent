@@ -9,6 +9,7 @@ public record TranscriptMessage(
         UUID meetingId,
         String text,
         String language,
+        String speaker,
         Instant startedAt,
         Instant endedAt,
         Instant receivedAt
@@ -19,6 +20,7 @@ public record TranscriptMessage(
                 segment.getMeeting().getId(),
                 segment.getText(),
                 segment.getLanguage(),
+                segment.getSpeaker(),
                 segment.getStartedAt(),
                 segment.getEndedAt(),
                 segment.getReceivedAt()

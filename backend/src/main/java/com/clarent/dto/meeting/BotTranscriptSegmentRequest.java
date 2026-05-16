@@ -10,6 +10,7 @@ public record BotTranscriptSegmentRequest(
         @JsonProperty("duration_seconds") Double durationSeconds,
         @NotBlank String text,
         String language,
+        String speaker,
         @JsonProperty("meeting_id") String meetingId,
         String task
 ) {

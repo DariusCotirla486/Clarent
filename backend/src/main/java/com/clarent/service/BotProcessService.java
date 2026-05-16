@@ -33,6 +33,10 @@ public class BotProcessService {
     private final String computeType;
     private final String task;
     private final boolean showBrowser;
+    private final boolean ignoreLocalMic;
+    private final String managerMicDevice;
+    private final String managerMicThreshold;
+    private final String managerMicHangoverSeconds;
 
     public BotProcessService(
             MeetingSessionRepository meetingSessionRepository,
@@ -48,7 +52,11 @@ public class BotProcessService {
             @Value("${clarent.bot.asr-device:auto}") String asrDevice,
             @Value("${clarent.bot.compute-type:int8_float16}") String computeType,
             @Value("${clarent.bot.task:translate}") String task,
-            @Value("${clarent.bot.show-browser:false}") boolean showBrowser
+            @Value("${clarent.bot.show-browser:false}") boolean showBrowser,
+            @Value("${clarent.bot.ignore-local-mic:true}") boolean ignoreLocalMic,
+            @Value("${clarent.bot.manager-mic-device:}") String managerMicDevice,
+            @Value("${clarent.bot.manager-mic-threshold:0.01}") String managerMicThreshold,
+            @Value("${clarent.bot.manager-mic-hangover-seconds:0.8}") String managerMicHangoverSeconds
     ) {
         this.meetingSessionRepository = meetingSessionRepository;
         this.messagingTemplate = messagingTemplate;
@@ -64,6 +72,10 @@ public class BotProcessService {
         this.computeType = computeType;
         this.task = task;
         this.showBrowser = showBrowser;
+        this.ignoreLocalMic = ignoreLocalMic;
+        this.managerMicDevice = managerMicDevice;
+        this.managerMicThreshold = managerMicThreshold;
+        this.managerMicHangoverSeconds = managerMicHangoverSeconds;
     }
 
     public boolean isAutoStart() {
@@ -131,6 +143,17 @@ public class BotProcessService {
             command.add("--audio-device");
             command.add(audioDevice);
         }
+        command.add(ignoreLocalMic ? "--ignore-local-mic" : "--no-ignore-local-mic");
+        if (StringUtils.hasText(managerMicDevice)) {
+            command.add("--manager-mic-device");
+            command.add(managerMicDevice);
+        }
+        command.add("--manager-mic-threshold");
+        command.add(managerMicThreshold);
+        command.add("--manager-mic-hangover-seconds");
+        command.add(managerMicHangoverSeconds);
+        command.add("--diarization");
+        command.add("off");
         command.add("--chunk-seconds");
         command.add("6");
         command.add("--model-size");

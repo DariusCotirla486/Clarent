@@ -10,6 +10,6 @@ class TranscriptSegment:
     duration_seconds: float
     text: str
     language: str | None = None
+    speaker: str | None = None
     meeting_id: str | None = None
     task: str = "transcribe"
-

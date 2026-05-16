@@ -38,3 +38,7 @@ clarent:
     compute-type: ${CLARENT_BOT_COMPUTE_TYPE:int8_float16}
     task: ${CLARENT_BOT_TASK:translate}
     show-browser: ${CLARENT_BOT_SHOW_BROWSER:false}
+    ignore-local-mic: ${CLARENT_BOT_IGNORE_LOCAL_MIC:true}
+    manager-mic-device: ${CLARENT_BOT_MANAGER_MIC_DEVICE:}
+    manager-mic-threshold: ${CLARENT_BOT_MANAGER_MIC_THRESHOLD:0.01}
+    manager-mic-hangover-seconds: ${CLARENT_BOT_MANAGER_MIC_HANGOVER_SECONDS:0.8}
