@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { ArrowRight, Bot, BrainCircuit, CheckCircle2, Headphones, LayoutDashboard, LockKeyhole, MessageSquareText, PlugZap, Radio, ShieldCheck, Sparkles, UsersRound, X } from 'lucide-react';
+import { ArrowRight, Bot, BrainCircuit, CheckCircle2, FileText, Headphones, LayoutDashboard, LockKeyhole, MessageSquareText, PlugZap, Radio, ShieldCheck, Sparkles, Trash2, UserPlus, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
@@ -10,10 +10,11 @@ const WS_URL = API_URL.replace(/^http/, 'ws');
 function api(path, options = {}) {
   const token = localStorage.getItem('clarent_token');
   const isPublicAuthRequest = path === '/api/auth/login' || path === '/api/auth/register';
+  const isFormData = options.body instanceof FormData;
   return fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token && !isPublicAuthRequest ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
@@ -273,24 +274,45 @@ function Dashboard() {
           </p>
         </div>
         <div className="dashboard-card">
-            <LayoutDashboard size={22} />
-            <h2>Authentication ready</h2>
-            <p>JWT and role-based routing are wired. Workspace and meeting modules come next.</p>
+          <LayoutDashboard size={22} />
+          <h2>Authentication ready</h2>
+          <p>JWT and role-based routing are wired. Workspace and meeting modules come next.</p>
         </div>
       </section>
-      {user.role === 'MANAGER' && (
-        <section className="manager-actions">
-          <Link className="action-panel" to="/meeting-assistant">
-            <div className="action-icon"><Headphones size={22} /></div>
+      <section className="manager-actions">
+        {user.role === 'MANAGER' ? (
+          <>
+            <Link className="action-panel" to="/meeting-assistant">
+              <div className="action-icon"><Headphones size={22} /></div>
+              <div>
+                <p className="eyebrow">Live workspace</p>
+                <h2>Meeting assistant</h2>
+                <p>Connect Clarent to a customer meeting and watch the transcript stream into your workspace.</p>
+              </div>
+              <ArrowRight size={20} />
+            </Link>
+            <Link className="action-panel" to="/manage-team">
+              <div className="action-icon"><UsersRound size={22} /></div>
+              <div>
+                <p className="eyebrow">Team workspace</p>
+                <h2>Manage team</h2>
+                <p>Add or remove team members and prepare shared documents for generated meeting work.</p>
+              </div>
+              <ArrowRight size={20} />
+            </Link>
+          </>
+        ) : (
+          <Link className="action-panel" to="/team">
+            <div className="action-icon"><UsersRound size={22} /></div>
             <div>
-              <p className="eyebrow">Live workspace</p>
-              <h2>Meeting assistant</h2>
-              <p>Connect Clarent to a customer meeting and watch the transcript stream into your workspace.</p>
+              <p className="eyebrow">Team workspace</p>
+              <h2>View team</h2>
+              <p>See the people in your Clarent team and the shared workspace you belong to.</p>
             </div>
             <ArrowRight size={20} />
           </Link>
-        </section>
-      )}
+        )}
+      </section>
     </main>
   );
 }
@@ -528,6 +550,248 @@ function MeetingAssistantPage() {
   );
 }
 
+function TeamPage({ mode }) {
+  const user = JSON.parse(localStorage.getItem('clarent_user') || 'null');
+  const [team, setTeam] = useState(null);
+  const [email, setEmail] = useState('');
+  const [documentFile, setDocumentFile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
+
+  const isManagerMode = mode === 'manage';
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+    if (isManagerMode && user.role !== 'MANAGER') {
+      return;
+    }
+
+    const endpoint = isManagerMode ? '/api/manager/team' : '/api/member/team';
+    setLoading(true);
+    api(endpoint)
+      .then(setTeam)
+      .catch((err) => setError(err.message))
+      .finally(() => setLoading(false));
+  }, [isManagerMode]);
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (isManagerMode && user.role !== 'MANAGER') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  async function addMember(event) {
+    event.preventDefault();
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const data = await api('/api/manager/team/members', {
+        method: 'POST',
+        body: JSON.stringify({ email })
+      });
+      setTeam(data);
+      setEmail('');
+      setNotice('Team member added.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function removeMember(memberId) {
+    setSaving(true);
+    setError('');
+    setNotice('');
+    try {
+      const data = await api(`/api/manager/team/members/${memberId}`, {
+        method: 'DELETE'
+      });
+      setTeam(data);
+      setNotice('Team member removed.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function uploadDocument(event) {
+    event.preventDefault();
+    if (!documentFile) {
+      setError('Choose a .txt, .pdf, .doc, or .docx file first.');
+      return;
+    }
+
+    setUploading(true);
+    setError('');
+    setNotice('');
+    try {
+      const formData = new FormData();
+      formData.append('file', documentFile);
+      const data = await api('/api/manager/team/document', {
+        method: 'POST',
+        body: formData
+      });
+      setTeam(data);
+      setDocumentFile(null);
+      event.target.reset();
+      setNotice('Team context document updated.');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  const document = team?.document;
+
+  return (
+    <main className="assistant-page">
+      <nav className="nav compact">
+        <Link className="brand" to="/dashboard">
+          <span className="brand-mark">C</span>
+          Clarent
+        </Link>
+        <Link className="ghost-link" to="/dashboard">Dashboard</Link>
+      </nav>
+
+      <section className="assistant-layout">
+        <div className="assistant-copy">
+          <p className="eyebrow">{isManagerMode ? 'Manager workspace' : 'Team workspace'}</p>
+          <h1>{isManagerMode ? 'Manage team' : 'View team'}</h1>
+          <p className="hero-text">
+            {isManagerMode
+              ? 'Keep your Clarent workspace tied to the people who will receive tasks and review AI-generated documents.'
+              : 'See the Clarent workspace you belong to and the people who will share generated meeting context.'}
+          </p>
+        </div>
+        <aside className="assistant-status">
+          <div className="status-row">
+            <UsersRound size={18} />
+            <span>{team?.teamName || 'No team yet'}</span>
+          </div>
+          <p>{team?.managerName ? `Managed by ${team.managerName}.` : 'You have not been added to a team yet.'}</p>
+          <small>{team?.members?.length || 0} member{team?.members?.length === 1 ? '' : 's'}</small>
+        </aside>
+      </section>
+
+      <section className="team-layout">
+        {isManagerMode && (
+          <aside className="team-panel">
+            <div>
+              <p className="eyebrow">Add member</p>
+              <h2>Invite by account email</h2>
+            </div>
+            <form className="team-form" onSubmit={addMember}>
+              <label>
+                Team member email
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="member@company.com"
+                  required
+                />
+              </label>
+              <button className="submit-button" disabled={saving} type="submit">
+                <UserPlus size={18} /> Add member
+              </button>
+            </form>
+            <div className="document-box">
+              <div>
+                <p className="eyebrow">Team documents</p>
+                <h2>Product context</h2>
+                <p>The assistant will use this later when generating clarifying questions.</p>
+              </div>
+              {document && (
+                <div className="document-meta">
+                  <FileText size={18} />
+                  <div>
+                    <strong>{document.fileName}</strong>
+                    <span>{(document.sizeBytes / 1024).toFixed(1)} KB · updated {new Date(document.updatedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              )}
+              <form className="team-form" onSubmit={uploadDocument}>
+                <label>
+                  Context document
+                  <input
+                    type="file"
+                    accept=".txt,.pdf,.doc,.docx,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    onChange={(event) => setDocumentFile(event.target.files?.[0] || null)}
+                  />
+                </label>
+                <button className="ghost-button document-button" disabled={uploading} type="submit">
+                  <FileText size={18} /> {document ? 'Replace document' : 'Upload document'}
+                </button>
+              </form>
+            </div>
+          </aside>
+        )}
+
+        <section className="team-panel members-panel">
+          <div className="team-panel-header">
+            <div>
+              <p className="eyebrow">People</p>
+              <h2>{loading ? 'Loading team' : team?.teamName || 'No team assigned'}</h2>
+            </div>
+            <span className="socket-pill connected">{team?.members?.length || 0} users</span>
+          </div>
+
+          {error && <p className="form-error">{error}</p>}
+          {notice && <p className="form-success">{notice}</p>}
+          {document && !isManagerMode && (
+            <div className="document-meta member-document">
+              <FileText size={18} />
+              <div>
+                <strong>{document.fileName}</strong>
+                <span>Team context document updated {new Date(document.updatedAt).toLocaleDateString()}</span>
+              </div>
+            </div>
+          )}
+
+          {!loading && (!team?.members || team.members.length === 0) && (
+            <div className="empty-transcript compact-empty">
+              <UsersRound size={26} />
+              <h3>No team members yet</h3>
+              <p>{isManagerMode ? 'Add registered team member accounts by email.' : 'Ask your manager to add your account to their team.'}</p>
+            </div>
+          )}
+
+          {team?.members?.length > 0 && (
+            <div className="member-list">
+              {team.members.map((member) => (
+                <article className="member-row" key={member.userId}>
+                  <div className="member-avatar">{member.fullName.slice(0, 1).toUpperCase()}</div>
+                  <div>
+                    <h3>{member.fullName}</h3>
+                    <p>{member.email}</p>
+                  </div>
+                  <span className="role-chip">{member.manager ? 'Manager' : 'Team member'}</span>
+                  {isManagerMode && !member.manager && (
+                    <button className="icon-button inline" aria-label={`Remove ${member.fullName}`} disabled={saving} onClick={() => removeMember(member.userId)}>
+                      <Trash2 size={17} />
+                    </button>
+                  )}
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      </section>
+    </main>
+  );
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -537,6 +801,8 @@ function App() {
         <Route path="/register" element={<AuthLayout mode="register" />} />
         <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/meeting-assistant" element={<MeetingAssistantPage />} />
+        <Route path="/manage-team" element={<TeamPage mode="manage" />} />
+        <Route path="/team" element={<TeamPage mode="view" />} />
       </Routes>
     </BrowserRouter>
   );

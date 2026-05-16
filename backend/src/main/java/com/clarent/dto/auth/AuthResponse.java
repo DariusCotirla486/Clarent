@@ -8,6 +8,8 @@ public record AuthResponse(
         UUID userId,
         String fullName,
         String email,
-        Role role
+        Role role,
+        UUID teamId,
+        String teamName
 ) {
 }

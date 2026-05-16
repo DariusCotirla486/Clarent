@@ -1,25 +1,23 @@
-package com.clarent.dto.auth;
+package com.clarent.dto.team;
 
 import com.clarent.domain.user.AppUser;
 import com.clarent.domain.user.Role;
 import java.util.UUID;
 
-public record MeResponse(
+public record TeamMemberResponse(
         UUID userId,
         String fullName,
         String email,
         Role role,
-        UUID teamId,
-        String teamName
+        boolean manager
 ) {
-    public static MeResponse from(AppUser user) {
-        return new MeResponse(
+    public static TeamMemberResponse from(AppUser user, UUID managerId) {
+        return new TeamMemberResponse(
                 user.getId(),
                 user.getFullName(),
                 user.getEmail(),
                 user.getRole(),
-                user.getTeam() == null ? null : user.getTeam().getId(),
-                user.getTeam() == null ? null : user.getTeam().getName()
+                user.getId().equals(managerId)
         );
     }
 }
