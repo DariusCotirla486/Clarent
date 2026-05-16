@@ -8,15 +8,20 @@ const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
 
 function api(path, options = {}) {
   const token = localStorage.getItem('clarent_token');
+  const isPublicAuthRequest = path === '/api/auth/login' || path === '/api/auth/register';
   return fetch(`${API_URL}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token && !isPublicAuthRequest ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers
     }
   }).then(async (response) => {
     const payload = await response.json().catch(() => ({}));
+    if (response.status === 401) {
+      localStorage.removeItem('clarent_token');
+      localStorage.removeItem('clarent_user');
+    }
     if (!response.ok) {
       throw new Error(payload.message || 'Request failed');
     }

@@ -1,0 +1,23 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: clarent-backend
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/clarent}
+    username: ${DB_USERNAME:clarent_user}
+    password: ${DB_PASSWORD:clarent_dev_password}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+
+clarent:
+  security:
+    jwt:
+      # Development-only fallback. Override with JWT_SECRET in real environments.
+      secret: ${JWT_SECRET:Q2xhcmVudERldlNlY3JldEtleUZvckpXVEhTMjU2U2lnbmluZ0NoYW5nZU1l}
+      expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}

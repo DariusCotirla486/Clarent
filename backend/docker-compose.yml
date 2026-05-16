@@ -1,0 +1,15 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: clarent-postgres
+    environment:
+      POSTGRES_DB: clarent
+      POSTGRES_USER: clarent_user
+      POSTGRES_PASSWORD: clarent_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - clarent-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  clarent-postgres-data:
