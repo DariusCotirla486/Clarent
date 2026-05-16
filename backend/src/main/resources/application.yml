@@ -21,3 +21,16 @@ clarent:
       # Development-only fallback. Override with JWT_SECRET in real environments.
       secret: ${JWT_SECRET:Q2xhcmVudERldlNlY3JldEtleUZvckpXVEhTMjU2U2lnbmluZ0NoYW5nZU1l}
       expiration-minutes: ${JWT_EXPIRATION_MINUTES:720}
+  bot:
+    auto-start: ${CLARENT_BOT_AUTO_START:true}
+    workdir: ${CLARENT_BOT_WORKDIR:..}
+    python: ${CLARENT_BOT_PYTHON:python}
+    script: ${CLARENT_BOT_SCRIPT:clarent_meeting_listener_bot.py}
+    token: ${CLARENT_BOT_TOKEN:dev-bot-token}
+    audio-backend: ${CLARENT_BOT_AUDIO_BACKEND:soundcard-loopback}
+    audio-device: ${CLARENT_BOT_AUDIO_DEVICE:}
+    model-size: ${CLARENT_BOT_MODEL_SIZE:small}
+    asr-device: ${CLARENT_BOT_ASR_DEVICE:auto}
+    compute-type: ${CLARENT_BOT_COMPUTE_TYPE:int8_float16}
+    task: ${CLARENT_BOT_TASK:translate}
+    show-browser: ${CLARENT_BOT_SHOW_BROWSER:false}

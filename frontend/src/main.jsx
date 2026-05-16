@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, Link, Navigate, Route, Routes, useNavigate } from 'react-router-dom';
-import { ArrowRight, Bot, BrainCircuit, CheckCircle2, LayoutDashboard, LockKeyhole, MessageSquareText, Sparkles, UsersRound } from 'lucide-react';
+import { ArrowRight, Bot, BrainCircuit, CheckCircle2, Headphones, LayoutDashboard, LockKeyhole, MessageSquareText, PlugZap, Radio, ShieldCheck, Sparkles, UsersRound, X } from 'lucide-react';
 import './styles.css';
 
 const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:8080';
+const WS_URL = API_URL.replace(/^http/, 'ws');
 
 function api(path, options = {}) {
   const token = localStorage.getItem('clarent_token');
@@ -27,6 +28,30 @@ function api(path, options = {}) {
     }
     return payload;
   });
+}
+
+function sendStompFrame(socket, command, headers = {}, body = '') {
+  const headerLines = Object.entries(headers).map(([key, value]) => `${key}:${value}`).join('\n');
+  socket.send(`${command}\n${headerLines}\n\n${body}\0`);
+}
+
+function parseStompFrame(rawFrame) {
+  const trimmed = rawFrame.replace(/^\n+/, '');
+  if (!trimmed.trim()) {
+    return null;
+  }
+
+  const separatorIndex = trimmed.indexOf('\n\n');
+  const headerBlock = separatorIndex >= 0 ? trimmed.slice(0, separatorIndex) : trimmed;
+  const body = separatorIndex >= 0 ? trimmed.slice(separatorIndex + 2) : '';
+  const [command, ...headerLines] = headerBlock.split('\n');
+  const headers = Object.fromEntries(
+    headerLines
+      .map((line) => line.split(':'))
+      .filter(([key, value]) => key && value)
+      .map(([key, ...value]) => [key, value.join(':')])
+  );
+  return { command, headers, body };
 }
 
 function useReveal() {
@@ -248,11 +273,257 @@ function Dashboard() {
           </p>
         </div>
         <div className="dashboard-card">
-          <LayoutDashboard size={22} />
-          <h2>Authentication ready</h2>
-          <p>JWT and role-based routing are wired. Workspace and meeting modules come next.</p>
+            <LayoutDashboard size={22} />
+            <h2>Authentication ready</h2>
+            <p>JWT and role-based routing are wired. Workspace and meeting modules come next.</p>
         </div>
       </section>
+      {user.role === 'MANAGER' && (
+        <section className="manager-actions">
+          <Link className="action-panel" to="/meeting-assistant">
+            <div className="action-icon"><Headphones size={22} /></div>
+            <div>
+              <p className="eyebrow">Live workspace</p>
+              <h2>Meeting assistant</h2>
+              <p>Connect Clarent to a customer meeting and watch the transcript stream into your workspace.</p>
+            </div>
+            <ArrowRight size={20} />
+          </Link>
+        </section>
+      )}
+    </main>
+  );
+}
+
+const PLATFORM_LABELS = {
+  TEAMS: 'Microsoft Teams',
+  GOOGLE_MEET: 'Google Meet',
+  ZOOM: 'Zoom'
+};
+
+function MeetingAssistantPage() {
+  const user = JSON.parse(localStorage.getItem('clarent_user') || 'null');
+  const [modalOpen, setModalOpen] = useState(false);
+  const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState('');
+  const [meeting, setMeeting] = useState(null);
+  const [segments, setSegments] = useState([]);
+  const [socketState, setSocketState] = useState('idle');
+  const [connectionMessage, setConnectionMessage] = useState('');
+  const [form, setForm] = useState({
+    platform: 'TEAMS',
+    inviteLink: ''
+  });
+
+  useEffect(() => {
+    if (!meeting?.meetingId) {
+      return undefined;
+    }
+
+    let closed = false;
+    const socket = new WebSocket(`${WS_URL}/ws`);
+    setSocketState('connecting');
+
+    socket.addEventListener('open', () => {
+      sendStompFrame(socket, 'CONNECT', {
+        'accept-version': '1.2',
+        'heart-beat': '10000,10000'
+      });
+    });
+
+    socket.addEventListener('message', (event) => {
+      String(event.data).split('\0').forEach((rawFrame) => {
+        const frame = parseStompFrame(rawFrame);
+        if (!frame) {
+          return;
+        }
+
+        if (frame.command === 'CONNECTED') {
+          setSocketState('connected');
+          sendStompFrame(socket, 'SUBSCRIBE', {
+            id: `transcript-${meeting.meetingId}`,
+            destination: meeting.transcriptTopic
+          });
+          sendStompFrame(socket, 'SUBSCRIBE', {
+            id: `status-${meeting.meetingId}`,
+            destination: meeting.statusTopic
+          });
+          setConnectionMessage('Clarent is connecting to the meeting.');
+        }
+
+        if (frame.command === 'MESSAGE' && frame.body) {
+          const payload = JSON.parse(frame.body);
+          if (frame.headers.destination === meeting.transcriptTopic) {
+            setSegments((current) => [...current, payload]);
+          }
+          if (frame.headers.destination === meeting.statusTopic) {
+            setMeeting((current) => current ? { ...current, status: payload.status, message: payload.message } : current);
+            setConnectionMessage(payload.message);
+          }
+        }
+      });
+    });
+
+    socket.addEventListener('close', () => {
+      if (!closed) {
+        setSocketState('closed');
+      }
+    });
+
+    socket.addEventListener('error', () => {
+      setSocketState('error');
+      setConnectionMessage('The live transcript socket could not connect.');
+    });
+
+    return () => {
+      closed = true;
+      if (socket.readyState === WebSocket.OPEN) {
+        sendStompFrame(socket, 'DISCONNECT', { receipt: `disconnect-${meeting.meetingId}` });
+      }
+      socket.close();
+    };
+  }, [meeting?.meetingId]);
+
+  if (!user) {
+    return <Navigate to="/login" replace />;
+  }
+
+  if (user.role !== 'MANAGER') {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  async function connectMeeting(event) {
+    event.preventDefault();
+    setConnecting(true);
+    setError('');
+    try {
+      const data = await api('/api/manager/meeting-assistant/connect', {
+        method: 'POST',
+        body: JSON.stringify(form)
+      });
+      setMeeting(data);
+      setSegments([]);
+      setConnectionMessage(data.message);
+      setModalOpen(false);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  return (
+    <main className="assistant-page">
+      <nav className="nav compact">
+        <Link className="brand" to="/dashboard">
+          <span className="brand-mark">C</span>
+          Clarent
+        </Link>
+        <div className="nav-actions">
+          <Link className="ghost-link" to="/dashboard">Dashboard</Link>
+          <button className="primary-link" onClick={() => setModalOpen(true)}>
+            <PlugZap size={18} /> Connect
+          </button>
+        </div>
+      </nav>
+
+      <section className="assistant-layout">
+        <div className="assistant-copy">
+          <p className="eyebrow">Manager workspace</p>
+          <h1>Meeting assistant</h1>
+          <p className="hero-text">
+            Connect Clarent to a live meeting. The transcript stays locked until a meeting session is created,
+            then updates as the local bot sends speech chunks back to the backend.
+          </p>
+        </div>
+        <aside className="assistant-status">
+          <div className="status-row">
+            <Radio size={18} />
+            <span>{meeting ? meeting.status.replaceAll('_', ' ') : 'Not connected'}</span>
+          </div>
+          <p>{connectionMessage || 'Choose a meeting platform and invite link to start the assistant.'}</p>
+          {meeting && <small>{PLATFORM_LABELS[meeting.platform]} session</small>}
+        </aside>
+      </section>
+
+      <section className={`transcript-stage ${meeting ? '' : 'locked'}`}>
+        <div className="transcript-toolbar">
+          <div>
+            <p className="eyebrow">Live transcript</p>
+            <h2>{meeting ? 'Clarent transcript stream' : 'Waiting for Clarent'}</h2>
+          </div>
+          <span className={`socket-pill ${socketState}`}>{socketState}</span>
+        </div>
+
+        {!meeting && (
+          <div className="locked-state">
+            <LockKeyhole size={28} />
+            <h3>Transcript locked</h3>
+            <p>Connect Clarent to a Teams, Google Meet, or Zoom invite link to unlock this screen.</p>
+            <button className="primary-link" onClick={() => setModalOpen(true)}>
+              <PlugZap size={18} /> Connect
+            </button>
+          </div>
+        )}
+
+        {meeting && segments.length === 0 && (
+          <div className="empty-transcript">
+            <ShieldCheck size={26} />
+            <h3>Clarent is standing by</h3>
+            <p>Once the bot is admitted and hears speech, transcript chunks will appear here.</p>
+          </div>
+        )}
+
+        {segments.length > 0 && (
+          <div className="transcript-list">
+            {segments.map((segment) => (
+              <article className="transcript-line" key={segment.id}>
+                <time>{new Date(segment.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time>
+                <p>{segment.text}</p>
+                {segment.language && <span>{segment.language}</span>}
+              </article>
+            ))}
+          </div>
+        )}
+      </section>
+
+      {modalOpen && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="connect-modal" role="dialog" aria-modal="true" aria-labelledby="connect-title">
+            <button className="icon-button" aria-label="Close connect dialog" onClick={() => setModalOpen(false)}>
+              <X size={18} />
+            </button>
+            <div>
+              <p className="eyebrow">New session</p>
+              <h2 id="connect-title">Connect Clarent</h2>
+            </div>
+            <form className="auth-form" onSubmit={connectMeeting}>
+              <label>
+                Platform
+                <select value={form.platform} onChange={(event) => setForm({ ...form, platform: event.target.value })}>
+                  <option value="TEAMS">Microsoft Teams</option>
+                  <option value="GOOGLE_MEET">Google Meet</option>
+                  <option value="ZOOM">Zoom</option>
+                </select>
+              </label>
+              <label>
+                Invite link
+                <input
+                  type="url"
+                  value={form.inviteLink}
+                  onChange={(event) => setForm({ ...form, inviteLink: event.target.value })}
+                  placeholder="https://..."
+                  required
+                />
+              </label>
+              {error && <p className="form-error">{error}</p>}
+              <button className="submit-button" disabled={connecting} type="submit">
+                {connecting ? 'Connecting...' : 'Connect'}
+              </button>
+            </form>
+          </section>
+        </div>
+      )}
     </main>
   );
 }
@@ -265,6 +536,7 @@ function App() {
         <Route path="/login" element={<AuthLayout mode="login" />} />
         <Route path="/register" element={<AuthLayout mode="register" />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/meeting-assistant" element={<MeetingAssistantPage />} />
       </Routes>
     </BrowserRouter>
   );

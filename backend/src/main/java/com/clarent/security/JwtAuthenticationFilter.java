@@ -70,6 +70,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         boolean publicAuthRequest = request.getServletPath().startsWith("/api/auth/")
                 && HttpMethod.POST.matches(request.getMethod());
         boolean healthRequest = "/api/health".equals(request.getServletPath());
-        return publicAuthRequest || healthRequest;
+        boolean botRequest = request.getServletPath().startsWith("/api/bot/");
+        boolean webSocketRequest = "/ws".equals(request.getServletPath())
+                || request.getServletPath().startsWith("/ws/");
+        return publicAuthRequest || healthRequest || botRequest || webSocketRequest;
     }
 }
