@@ -42,3 +42,6 @@ clarent:
     manager-mic-device: ${CLARENT_BOT_MANAGER_MIC_DEVICE:}
     manager-mic-threshold: ${CLARENT_BOT_MANAGER_MIC_THRESHOLD:0.01}
     manager-mic-hangover-seconds: ${CLARENT_BOT_MANAGER_MIC_HANGOVER_SECONDS:0.8}
+    vad-mode: ${CLARENT_BOT_VAD_MODE:auto}
+    silero-threshold: ${CLARENT_BOT_SILERO_THRESHOLD:0.5}
+    speech-end-silence-seconds: ${CLARENT_BOT_SPEECH_END_SILENCE_SECONDS:1.5}

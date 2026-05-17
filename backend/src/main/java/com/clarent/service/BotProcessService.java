@@ -37,6 +37,9 @@ public class BotProcessService {
     private final String managerMicDevice;
     private final String managerMicThreshold;
     private final String managerMicHangoverSeconds;
+    private final String vadMode;
+    private final String sileroThreshold;
+    private final String speechEndSilenceSeconds;
 
     public BotProcessService(
             MeetingSessionRepository meetingSessionRepository,
@@ -56,7 +59,10 @@ public class BotProcessService {
             @Value("${clarent.bot.ignore-local-mic:true}") boolean ignoreLocalMic,
             @Value("${clarent.bot.manager-mic-device:}") String managerMicDevice,
             @Value("${clarent.bot.manager-mic-threshold:0.01}") String managerMicThreshold,
-            @Value("${clarent.bot.manager-mic-hangover-seconds:0.8}") String managerMicHangoverSeconds
+            @Value("${clarent.bot.manager-mic-hangover-seconds:0.8}") String managerMicHangoverSeconds,
+            @Value("${clarent.bot.vad-mode:auto}") String vadMode,
+            @Value("${clarent.bot.silero-threshold:0.5}") String sileroThreshold,
+            @Value("${clarent.bot.speech-end-silence-seconds:1.5}") String speechEndSilenceSeconds
     ) {
         this.meetingSessionRepository = meetingSessionRepository;
         this.messagingTemplate = messagingTemplate;
@@ -76,6 +82,9 @@ public class BotProcessService {
         this.managerMicDevice = managerMicDevice;
         this.managerMicThreshold = managerMicThreshold;
         this.managerMicHangoverSeconds = managerMicHangoverSeconds;
+        this.vadMode = vadMode;
+        this.sileroThreshold = sileroThreshold;
+        this.speechEndSilenceSeconds = speechEndSilenceSeconds;
     }
 
     public boolean isAutoStart() {
@@ -152,6 +161,12 @@ public class BotProcessService {
         command.add(managerMicThreshold);
         command.add("--manager-mic-hangover-seconds");
         command.add(managerMicHangoverSeconds);
+        command.add("--vad-mode");
+        command.add(vadMode);
+        command.add("--silero-threshold");
+        command.add(sileroThreshold);
+        command.add("--speech-end-silence-seconds");
+        command.add(speechEndSilenceSeconds);
         command.add("--diarization");
         command.add("off");
         command.add("--chunk-seconds");

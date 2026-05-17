@@ -163,7 +163,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--speech-end-silence-seconds",
         type=float,
-        default=4.0,
+        default=1.5,
         help="Dynamic segment ends after this much silence.",
     )
     parser.add_argument(
@@ -212,6 +212,18 @@ def build_parser() -> argparse.ArgumentParser:
         type=float,
         default=0.8,
         help="Keep ignoring meeting audio this long after manager mic activity.",
+    )
+    parser.add_argument(
+        "--vad-mode",
+        choices=["auto", "silero", "rms"],
+        default="auto",
+        help="Voice activity detector. auto tries Silero and falls back to RMS.",
+    )
+    parser.add_argument(
+        "--silero-threshold",
+        type=float,
+        default=0.5,
+        help="Speech probability threshold used by Silero VAD.",
     )
     parser.add_argument(
         "--silence-threshold",
@@ -403,6 +415,8 @@ def main() -> int:
                     segmenter = DynamicSpeechSegmenter(
                         sample_rate=args.sample_rate,
                         silence_threshold=args.silence_threshold,
+                        vad_mode=args.vad_mode,
+                        silero_threshold=args.silero_threshold,
                         pre_buffer_seconds=args.pre_buffer_seconds,
                         speech_start_seconds=args.speech_start_seconds,
                         speech_end_silence_seconds=args.speech_end_silence_seconds,

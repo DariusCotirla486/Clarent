@@ -82,11 +82,72 @@ class SimpleSpeakerDiarizer:
         )
 
 
+class RmsVoiceDetector:
+    def __init__(self, threshold: float) -> None:
+        self.threshold = threshold
+        self.name = "rms"
+
+    def is_speech(self, audio: Any) -> bool:
+        return rms(audio) >= self.threshold
+
+
+class SileroVoiceDetector:
+    def __init__(
+        self,
+        sample_rate: int,
+        threshold: float,
+        rms_fallback_threshold: float,
+    ) -> None:
+        self.sample_rate = sample_rate
+        self.threshold = threshold
+        self.rms_fallback = RmsVoiceDetector(rms_fallback_threshold)
+        self.name = "silero"
+        self.window_size = 512 if sample_rate == 16_000 else 256
+        try:
+            import torch
+            from silero_vad import load_silero_vad
+
+            self.torch = torch
+            self.model = load_silero_vad()
+            if hasattr(self.model, "reset_states"):
+                self.model.reset_states()
+            print(f"[vad] Silero VAD enabled (threshold={self.threshold:.2f}).")
+        except Exception as exc:
+            self.torch = None
+            self.model = None
+            self.name = "rms"
+            print(f"[vad] Silero VAD unavailable ({exc}). Falling back to RMS VAD.")
+
+    def is_speech(self, audio: Any) -> bool:
+        if self.model is None or self.torch is None:
+            return self.rms_fallback.is_speech(audio)
+
+        samples = np.asarray(audio, dtype=np.float32)
+        if len(samples) == 0:
+            return False
+
+        probabilities: list[float] = []
+        with self.torch.no_grad():
+            for start in range(0, len(samples), self.window_size):
+                window = samples[start:start + self.window_size]
+                if len(window) < self.window_size:
+                    window = np.pad(window, (0, self.window_size - len(window)))
+                tensor = self.torch.from_numpy(window)
+                probability = float(self.model(tensor, self.sample_rate).item())
+                probabilities.append(probability)
+
+        if not probabilities:
+            return False
+        return max(probabilities) >= self.threshold
+
+
 class DynamicSpeechSegmenter:
     def __init__(
         self,
         sample_rate: int,
         silence_threshold: float,
+        vad_mode: str,
+        silero_threshold: float,
         pre_buffer_seconds: float,
         speech_start_seconds: float,
         speech_end_silence_seconds: float,
@@ -97,6 +158,7 @@ class DynamicSpeechSegmenter:
     ) -> None:
         self.sample_rate = sample_rate
         self.silence_threshold = silence_threshold
+        self.voice_detector = self._create_voice_detector(vad_mode, silero_threshold)
         self.pre_buffer_seconds = pre_buffer_seconds
         self.speech_start_seconds = speech_start_seconds
         self.speech_end_silence_seconds = speech_end_silence_seconds
@@ -129,7 +191,7 @@ class DynamicSpeechSegmenter:
             audio_frame = np.zeros_like(audio_frame)
             voiced = False
         else:
-            voiced = rms(audio_frame) >= self.silence_threshold
+            voiced = self.voice_detector.is_speech(audio_frame)
 
         if not self.recording:
             if voiced:
@@ -223,3 +285,22 @@ class DynamicSpeechSegmenter:
         self.segment_frames = []
         self.segment_duration = 0.0
         self.silence_duration = 0.0
+
+    def _create_voice_detector(self, vad_mode: str, silero_threshold: float) -> Any:
+        if vad_mode == "rms":
+            print(f"[vad] RMS VAD enabled (threshold={self.silence_threshold:.4f}).")
+            return RmsVoiceDetector(self.silence_threshold)
+
+        if vad_mode == "silero":
+            return SileroVoiceDetector(
+                sample_rate=self.sample_rate,
+                threshold=silero_threshold,
+                rms_fallback_threshold=self.silence_threshold,
+            )
+
+        detector = SileroVoiceDetector(
+            sample_rate=self.sample_rate,
+            threshold=silero_threshold,
+            rms_fallback_threshold=self.silence_threshold,
+        )
+        return detector
