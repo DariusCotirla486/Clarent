@@ -55,6 +55,8 @@ class MeetingBrowser:
         self.browser: Any = None
         self.page: Any = None
         self.join_attempted_at: float | None = None
+        self.monitoring_started_at: float | None = None
+        self.has_seen_active_meeting = False
         self.runtime_browser_profile: str | None = None
 
     def __enter__(self) -> "MeetingBrowser":
@@ -119,6 +121,7 @@ class MeetingBrowser:
         self.page.goto(self.meeting_url, wait_until="domcontentloaded", timeout=90_000)
         self._dismiss_browser_prompt()
         self._try_join()
+        self.monitoring_started_at = time.monotonic()
         return self
 
     def __exit__(self, *_: Any) -> None:
@@ -159,9 +162,19 @@ class MeetingBrowser:
         if not self.page or self.page.is_closed():
             return True
 
-        if self.join_attempted_at and time.monotonic() - self.join_attempted_at < 20:
+        if self._looks_joined():
+            self.has_seen_active_meeting = True
             return False
+
+        if self._looks_zoom_joining_screen():
+            return False
+
         if self._looks_waiting_for_admission():
+            self.has_seen_active_meeting = True
+            return False
+
+        grace_seconds = 120 if self.platform == "zoom" else 45
+        if self.monitoring_started_at and time.monotonic() - self.monitoring_started_at < grace_seconds:
             return False
 
         ended_phrases = [
@@ -177,7 +190,6 @@ class MeetingBrowser:
             "has ended this meeting",
             "has ended for everyone",
             "call ended",
-            "rejoin",
             "return to home screen",
         ]
 

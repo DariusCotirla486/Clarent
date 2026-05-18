@@ -182,7 +182,7 @@ class LocalMicrophoneActivityMonitor:
         print(
             "[audio] Manager microphone ignore gate enabled on "
             f"{self.device if self.device is not None else '<default input>'} "
-            f"(threshold={self.threshold:.4f})."
+            f"(threshold={self.threshold:.4f}, hangover={self.hangover_seconds:.1f}s)."
         )
         return self
 

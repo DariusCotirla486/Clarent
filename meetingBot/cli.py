@@ -204,13 +204,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--manager-mic-threshold",
         type=float,
-        default=0.01,
+        default=0.006,
         help="RMS threshold that marks the manager microphone as active.",
     )
     parser.add_argument(
         "--manager-mic-hangover-seconds",
         type=float,
-        default=0.8,
+        default=1.6,
         help="Keep ignoring meeting audio this long after manager mic activity.",
     )
     parser.add_argument(

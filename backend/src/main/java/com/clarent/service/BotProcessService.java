@@ -58,8 +58,8 @@ public class BotProcessService {
             @Value("${clarent.bot.show-browser:false}") boolean showBrowser,
             @Value("${clarent.bot.ignore-local-mic:true}") boolean ignoreLocalMic,
             @Value("${clarent.bot.manager-mic-device:}") String managerMicDevice,
-            @Value("${clarent.bot.manager-mic-threshold:0.01}") String managerMicThreshold,
-            @Value("${clarent.bot.manager-mic-hangover-seconds:0.8}") String managerMicHangoverSeconds,
+            @Value("${clarent.bot.manager-mic-threshold:0.006}") String managerMicThreshold,
+            @Value("${clarent.bot.manager-mic-hangover-seconds:1.6}") String managerMicHangoverSeconds,
             @Value("${clarent.bot.vad-mode:auto}") String vadMode,
             @Value("${clarent.bot.silero-threshold:0.5}") String sileroThreshold,
             @Value("${clarent.bot.speech-end-silence-seconds:1.5}") String speechEndSilenceSeconds

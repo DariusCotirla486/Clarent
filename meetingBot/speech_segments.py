@@ -97,6 +97,7 @@ class SileroVoiceDetector:
         sample_rate: int,
         threshold: float,
         rms_fallback_threshold: float,
+        required: bool = False,
     ) -> None:
         self.sample_rate = sample_rate
         self.threshold = threshold
@@ -113,6 +114,12 @@ class SileroVoiceDetector:
                 self.model.reset_states()
             print(f"[vad] Silero VAD enabled (threshold={self.threshold:.2f}).")
         except Exception as exc:
+            if required:
+                raise SystemExit(
+                    "Silero VAD requires PyTorch. Install it in the same Python "
+                    "environment as the bot with `py -m pip install torch silero-vad`, "
+                    "or use `--vad-mode auto`/`--vad-mode rms`."
+                ) from exc
             self.torch = None
             self.model = None
             self.name = "rms"
@@ -296,6 +303,7 @@ class DynamicSpeechSegmenter:
                 sample_rate=self.sample_rate,
                 threshold=silero_threshold,
                 rms_fallback_threshold=self.silence_threshold,
+                required=True,
             )
 
         detector = SileroVoiceDetector(

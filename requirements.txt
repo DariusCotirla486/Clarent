@@ -3,4 +3,5 @@ faster-whisper
 sounddevice
 numpy
 soundcard
+torch
 silero-vad

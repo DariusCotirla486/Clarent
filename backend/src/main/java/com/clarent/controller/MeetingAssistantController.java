@@ -3,8 +3,11 @@ package com.clarent.controller;
 import com.clarent.domain.user.AppUser;
 import com.clarent.dto.meeting.ConnectMeetingRequest;
 import com.clarent.dto.meeting.ConnectMeetingResponse;
+import com.clarent.dto.meeting.QuestionItemResponse;
+import com.clarent.dto.meeting.QuestionSuggestionResponse;
 import com.clarent.dto.meeting.TranscriptMessage;
 import com.clarent.service.MeetingAssistantService;
+import com.clarent.service.QuestionGenerationService;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -20,9 +23,14 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/manager/meeting-assistant")
 public class MeetingAssistantController {
     private final MeetingAssistantService meetingAssistantService;
+    private final QuestionGenerationService questionGenerationService;
 
-    public MeetingAssistantController(MeetingAssistantService meetingAssistantService) {
+    public MeetingAssistantController(
+            MeetingAssistantService meetingAssistantService,
+            QuestionGenerationService questionGenerationService
+    ) {
         this.meetingAssistantService = meetingAssistantService;
+        this.questionGenerationService = questionGenerationService;
     }
 
     @PostMapping("/connect")
@@ -39,5 +47,31 @@ public class MeetingAssistantController {
             @AuthenticationPrincipal AppUser user
     ) {
         return meetingAssistantService.transcript(meetingId, user);
+    }
+
+    @GetMapping("/{meetingId}/questions")
+    public List<QuestionSuggestionResponse> questions(
+            @PathVariable UUID meetingId,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        return questionGenerationService.suggestions(meetingId, user);
+    }
+
+    @PostMapping("/{meetingId}/transcript/{segmentId}/questions")
+    public QuestionSuggestionResponse generateQuestions(
+            @PathVariable UUID meetingId,
+            @PathVariable UUID segmentId,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        return questionGenerationService.generate(meetingId, segmentId, user);
+    }
+
+    @PostMapping("/{meetingId}/questions/{questionId}/asked")
+    public QuestionItemResponse markQuestionAsked(
+            @PathVariable UUID meetingId,
+            @PathVariable UUID questionId,
+            @AuthenticationPrincipal AppUser user
+    ) {
+        return questionGenerationService.markAsked(meetingId, questionId, user);
     }
 }

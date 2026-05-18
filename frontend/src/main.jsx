@@ -330,8 +330,13 @@ function MeetingAssistantPage() {
   const [error, setError] = useState('');
   const [meeting, setMeeting] = useState(null);
   const [segments, setSegments] = useState([]);
+  const [questionSets, setQuestionSets] = useState([]);
   const [socketState, setSocketState] = useState('idle');
   const [connectionMessage, setConnectionMessage] = useState('');
+  const [questionError, setQuestionError] = useState('');
+  const [questionNotice, setQuestionNotice] = useState('');
+  const [generatingSegmentId, setGeneratingSegmentId] = useState(null);
+  const [markingQuestionId, setMarkingQuestionId] = useState(null);
   const [form, setForm] = useState({
     platform: 'TEAMS',
     inviteLink: ''
@@ -406,6 +411,17 @@ function MeetingAssistantPage() {
     };
   }, [meeting?.meetingId]);
 
+  useEffect(() => {
+    if (!meeting?.meetingId) {
+      setQuestionSets([]);
+      return;
+    }
+
+    api(`/api/manager/meeting-assistant/${meeting.meetingId}/questions`)
+      .then(setQuestionSets)
+      .catch((err) => setQuestionError(err.message));
+  }, [meeting?.meetingId]);
+
   if (!user) {
     return <Navigate to="/login" replace />;
   }
@@ -425,12 +441,50 @@ function MeetingAssistantPage() {
       });
       setMeeting(data);
       setSegments([]);
+      setQuestionSets([]);
       setConnectionMessage(data.message);
       setModalOpen(false);
     } catch (err) {
       setError(err.message);
     } finally {
       setConnecting(false);
+    }
+  }
+
+  async function generateQuestions(segment) {
+    setGeneratingSegmentId(segment.id);
+    setQuestionError('');
+    setQuestionNotice('');
+    try {
+      const data = await api(`/api/manager/meeting-assistant/${meeting.meetingId}/transcript/${segment.id}/questions`, {
+        method: 'POST'
+      });
+      setQuestionSets((current) => [data, ...current.filter((item) => item.id !== data.id)]);
+      setQuestionNotice('Questions generated for the selected transcript.');
+    } catch (err) {
+      setQuestionError(err.message);
+    } finally {
+      setGeneratingSegmentId(null);
+    }
+  }
+
+  async function markQuestionAsked(questionId) {
+    setMarkingQuestionId(questionId);
+    setQuestionError('');
+    setQuestionNotice('');
+    try {
+      const data = await api(`/api/manager/meeting-assistant/${meeting.meetingId}/questions/${questionId}/asked`, {
+        method: 'POST'
+      });
+      setQuestionSets((current) => current.map((suggestion) => ({
+        ...suggestion,
+        questions: suggestion.questions.map((question) => question.id === data.id ? data : question)
+      })));
+      setQuestionNotice('Question marked as asked.');
+    } catch (err) {
+      setQuestionError(err.message);
+    } finally {
+      setMarkingQuestionId(null);
     }
   }
 
@@ -468,45 +522,115 @@ function MeetingAssistantPage() {
         </aside>
       </section>
 
-      <section className={`transcript-stage ${meeting ? '' : 'locked'}`}>
-        <div className="transcript-toolbar">
-          <div>
-            <p className="eyebrow">Live transcript</p>
-            <h2>{meeting ? 'Clarent transcript stream' : 'Waiting for Clarent'}</h2>
+      <section className="assistant-workspace">
+        <section className={`transcript-stage ${meeting ? '' : 'locked'}`}>
+          <div className="transcript-toolbar">
+            <div>
+              <p className="eyebrow">Live transcript</p>
+              <h2>{meeting ? 'Clarent transcript stream' : 'Waiting for Clarent'}</h2>
+            </div>
+            <span className={`socket-pill ${socketState}`}>{socketState}</span>
           </div>
-          <span className={`socket-pill ${socketState}`}>{socketState}</span>
-        </div>
 
-        {!meeting && (
-          <div className="locked-state">
-            <LockKeyhole size={28} />
-            <h3>Transcript locked</h3>
-            <p>Connect Clarent to a Teams, Google Meet, or Zoom invite link to unlock this screen.</p>
-            <button className="primary-link" onClick={() => setModalOpen(true)}>
-              <PlugZap size={18} /> Connect
-            </button>
-          </div>
-        )}
+          {!meeting && (
+            <div className="locked-state">
+              <LockKeyhole size={28} />
+              <h3>Transcript locked</h3>
+              <p>Connect Clarent to a Teams, Google Meet, or Zoom invite link to unlock this screen.</p>
+              <button className="primary-link" onClick={() => setModalOpen(true)}>
+                <PlugZap size={18} /> Connect
+              </button>
+            </div>
+          )}
 
-        {meeting && segments.length === 0 && (
-          <div className="empty-transcript">
-            <ShieldCheck size={26} />
-            <h3>Clarent is standing by</h3>
-            <p>Once the bot is admitted and hears speech, transcript chunks will appear here.</p>
-          </div>
-        )}
+          {meeting && segments.length === 0 && (
+            <div className="empty-transcript">
+              <ShieldCheck size={26} />
+              <h3>Clarent is standing by</h3>
+              <p>Once the bot is admitted and hears speech, transcript chunks will appear here.</p>
+            </div>
+          )}
 
-        {segments.length > 0 && (
-          <div className="transcript-list">
-            {segments.map((segment) => (
-              <article className="transcript-line" key={segment.id}>
-                <time>{new Date(segment.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time>
-                <p>{segment.speaker && <strong>{segment.speaker}: </strong>}{segment.text}</p>
-                {segment.language && <span>{segment.language}</span>}
-              </article>
-            ))}
+          {segments.length > 0 && (
+            <div className="transcript-list">
+              {segments.map((segment) => (
+                <article className="transcript-line" key={segment.id}>
+                  <time>{new Date(segment.receivedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}</time>
+                  <p>{segment.speaker && <strong>{segment.speaker}: </strong>}{segment.text}</p>
+                  <div className="segment-actions">
+                    {segment.language && <span>{segment.language}</span>}
+                    <button
+                      className="ghost-button mini-button"
+                      disabled={generatingSegmentId === segment.id}
+                      onClick={() => generateQuestions(segment)}
+                    >
+                      <Sparkles size={15} /> {generatingSegmentId === segment.id ? 'Generating' : 'Questions'}
+                    </button>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className={`questions-stage ${meeting ? '' : 'locked'}`}>
+          <div className="questions-toolbar">
+            <div>
+              <p className="eyebrow">Clarifying questions</p>
+              <h2>Question workspace</h2>
+            </div>
+            <span className="socket-pill connected">{questionSets.length} sets</span>
           </div>
-        )}
+
+          {questionError && <p className="form-error question-message">{questionError}</p>}
+          {questionNotice && <p className="form-success question-message">{questionNotice}</p>}
+
+          {!meeting && (
+            <div className="empty-transcript compact-empty">
+              <BrainCircuit size={28} />
+              <h3>No meeting selected</h3>
+              <p>Question generation unlocks after Clarent connects to a meeting.</p>
+            </div>
+          )}
+
+          {meeting && questionSets.length === 0 && (
+            <div className="empty-transcript compact-empty">
+              <Sparkles size={28} />
+              <h3>No generated questions yet</h3>
+              <p>Select a useful transcript chunk and generate 3 questions from the team context document.</p>
+            </div>
+          )}
+
+          {questionSets.length > 0 && (
+            <div className="question-set-list">
+              {questionSets.map((suggestion) => (
+                <article className="question-set" key={suggestion.id}>
+                  <div className="question-set-header">
+                    <div>
+                      <p className="eyebrow">{new Date(suggestion.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                      <h3>From transcript</h3>
+                    </div>
+                    <span>{suggestion.modelName}</span>
+                  </div>
+                  <blockquote>{suggestion.transcriptText}</blockquote>
+                  <div className="question-options">
+                    {suggestion.questions.map((question) => (
+                      <button
+                        className={`question-choice ${question.asked ? 'asked' : ''}`}
+                        disabled={question.asked || markingQuestionId === question.id}
+                        key={question.id}
+                        onClick={() => markQuestionAsked(question.id)}
+                      >
+                        <span>{question.text}</span>
+                        <small>{question.asked ? 'Asked' : 'Mark asked'}</small>
+                      </button>
+                    ))}
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
       </section>
 
       {modalOpen && (
